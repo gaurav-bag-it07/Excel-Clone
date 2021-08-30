@@ -13,10 +13,12 @@ HTML, CSS, JQuery, JavaScript
 
 ## Functionalities:
 
-✅Formula evaluation<br/>
-✅Cycle detection in formula<br/>
+✅Cells formatting - textcolor, fillcolor, alignment, cut, copy, paste<br/>
+✅Save sheet to local memory<br/>
+✅Add/delete sheeet<br/>
+✅Multiple sheets<br/>
 ✅New open save functionality<br/>
-✅Cells formatting<br/>
+
 
 <br/>
 
