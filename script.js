@@ -16,8 +16,8 @@ for (let i = 1; i <= 100; i++) {
             n = Math.floor(n / 26);
         }
     }
-    $("#columns").append(`<div class="column-name">${str}</div>`)
-    $("#rows").append(`<div class="row-name">${i}</div>`)
+    $("#columns").append(`<div class="column-name column-${i}" id="${str}">${str}</div>`);
+    $("#rows").append(`<div class="row-name">${i}</div>`);
 }
 
 
@@ -40,7 +40,10 @@ let defaultProperties = {
     "underlined": false,
     "alignment": "left",
     "color": "#444",
-    "bgcolor": "#fff"
+    "bgcolor": "#fff",
+    "formula": "",
+    "upStream": [],
+    "downStream": [],
 };
 
 for (let i = 1; i <= 100; i++) {
@@ -65,7 +68,14 @@ $(".input-cell").dblclick(function (e) {
 
 $(".input-cell").blur(function (e) {
     $(this).attr("contenteditable", "false");
+    let [rowId, colId] = getRowCol(this);
+    if (cellData[selectedSheet][rowId - 1][colId - 1].formula != "") {
+        updateStreams(this,[]);
+    }
+    cellData[selectedSheet][rowId - 1][colId - 1].formula = "";
     updateCellData("text", $(this).text());
+    let selfColCode = $(`.column-${colId}`).attr("id");
+    evalFormula(selfColCode + rowId);
 });
 
 function getRowCol(ele) {
@@ -188,6 +198,7 @@ function changeHeader([rowId, colId]) {
     $("#font-family").val(data["font-family"]);
     $("#font-size").val(data["font-size"]);
     $("#font-family").css("font-family", data["font-family"]);
+    $("#formula-input").text(data.formula);
 }
 
 function addRemoveSelectFromFontStyle(data, property) {
@@ -217,6 +228,7 @@ $(".input-cell").mousemove(function (e) {
             startCell = { "rowId": rowId, "colId": colId };
             selectAllBetweenCells(startCell, startCell);
             startcellSelected = true;
+            $(".input-cell.selected").attr("contenteditable", "false");
         }
     } else {
         startcellSelected = false;
@@ -394,11 +406,11 @@ function updateCellData(property, value) {
             let [rowId, colId] = getRowCol(data);
             if (cellData[selectedSheet][rowId - 1] == undefined) {
                 cellData[selectedSheet][rowId - 1] = {};
-                cellData[selectedSheet][rowId - 1][colId - 1] = { ...defaultProperties };
+                cellData[selectedSheet][rowId - 1][colId - 1] = { ...defaultProperties, "upStream": [], "downStream": [] };
                 cellData[selectedSheet][rowId - 1][colId - 1][property] = value;
             } else {
                 if (cellData[selectedSheet][rowId - 1][colId - 1] == undefined) {
-                    cellData[selectedSheet][rowId - 1][colId - 1] = { ...defaultProperties };
+                    cellData[selectedSheet][rowId - 1][colId - 1] = { ...defaultProperties, "upStream": [], "downStream": [] };
                     cellData[selectedSheet][rowId - 1][colId - 1][property] = value;
                 } else {
                     cellData[selectedSheet][rowId - 1][colId - 1][property] = value;
@@ -694,16 +706,16 @@ $("#menu-file").click(function (e) {
             });
         }
     });
-    $(".save").click(function(e){
-        if(!save) {
+    $(".save").click(function (e) {
+        if (!save) {
             saveFile();
         }
     });
 
-    $(".open").click(function(e){
+    $(".open").click(function (e) {
         openFile();
     })
-    
+
 });
 
 function newFile() {
@@ -733,7 +745,7 @@ function saveFile(newClicked) {
                                     </div>
                                 </div>
                             </div>`);
-    $(".yes-button").click(function(e) {
+    $(".yes-button").click(function (e) {
         $(".title").text($(".sheet-modal-input").val());
         let a = document.createElement("a");
         a.href = `data:application/json,${encodeURIComponent(JSON.stringify(cellData))}`;
@@ -742,11 +754,11 @@ function saveFile(newClicked) {
         a.click();
         // a.remove();
         save = true;
-        
+
     });
     $(".no-button,.yes-button").click(function (e) {
         $(".sheet-modal-parent").remove();
-        if(newClicked) {
+        if (newClicked) {
             newFile();
         }
     });
@@ -756,7 +768,7 @@ function openFile() {
     let inputFile = $(`<input accept="application/json" type="file" />`);
     $(".container").append(inputFile);
     inputFile.click();
-    inputFile.change(function(e) {
+    inputFile.change(function (e) {
         console.log(inputFile.val());
         let file = e.target.files[0];
         $(".title").text(file.name.split(".json")[0]);
@@ -768,10 +780,10 @@ function openFile() {
             cellData = JSON.parse(reader.result);
             let sheets = Object.keys(cellData);
             lastlyAddedSheet = 1;
-            for(let i of sheets) {
-                if(i.includes("Sheet")) {
+            for (let i of sheets) {
+                if (i.includes("Sheet")) {
                     let splittedSheetArray = i.split("Sheet");
-                    if(splittedSheetArray.length == 2 && !isNaN(splittedSheetArray[1])) {
+                    if (splittedSheetArray.length == 2 && !isNaN(splittedSheetArray[1])) {
                         lastlyAddedSheet = parseInt(splittedSheetArray[1]);
                     }
                 }
@@ -788,35 +800,53 @@ function openFile() {
     });
 }
 
-let clipboard = {startCell : [], cellData: {}};
-
-$("#copy").click(function(e) {
-    clipboard = {startCell : [], cellData: {}};
+let clipboard = { startCell: [], cellData: {} };
+let contentCutted = false;
+$("#cut,#copy").click(function (e) {
+    if ($(this).text() == "content_cut") {
+        contentCutted = true;
+    }
+    clipboard = { startCell: [], cellData: {} };
     clipboard.startCell = getRowCol($(".input-cell.selected")[0]);
-    $(".input-cell.selected").each(function(index,data) {
-        let [rowId,colId] = getRowCol(data);
-        if(cellData[selectedSheet][rowId-1] && cellData[selectedSheet][rowId-1][colId-1]) {
-            if(!clipboard.cellData[rowId]) {
+    $(".input-cell.selected").each(function (index, data) {
+        let [rowId, colId] = getRowCol(data);
+        if (cellData[selectedSheet][rowId - 1] && cellData[selectedSheet][rowId - 1][colId - 1]) {
+            if (!clipboard.cellData[rowId]) {
                 clipboard.cellData[rowId] = {};
             }
-            clipboard.cellData[rowId][colId] = {...cellData[selectedSheet][rowId-1][colId-1]};
+            clipboard.cellData[rowId][colId] = { ...cellData[selectedSheet][rowId - 1][colId - 1] };
         }
     });
     console.log(clipboard);
 });
 
-$("#paste").click(function(e) {
+$("#paste").click(function (e) {
+    if (contentCutted) {
+        emptyPreviousSheet();
+    }
     let startCell = getRowCol($(".input-cell.selected")[0]);
     let rows = Object.keys(clipboard.cellData);
-    for(let i of rows) {
+    for (let i of rows) {
         let cols = Object.keys(clipboard.cellData[i]);
-        for(let j of cols) {
+        for (let j of cols) {
+            if (contentCutted) {
+                delete cellData[selectedSheet][i - 1][j - 1];
+                if (Object.keys(cellData[selectedSheet][i - 1]).length == 0) {
+                    delete cellData[selectedSheet][i - 1];
+                }
+            }
+
+        }
+    }
+    for (let i of rows) {
+        let cols = Object.keys(clipboard.cellData[i]);
+        for (let j of cols) {
             let rowDistance = parseInt(i) - parseInt(clipboard.startCell[0]);
             let colDistance = parseInt(j) - parseInt(clipboard.startCell[1]);
-            if(!cellData[selectedSheet][startCell[0] + rowDistance - 1]) {
+            if (!cellData[selectedSheet][startCell[0] + rowDistance - 1]) {
                 cellData[selectedSheet][startCell[0] + rowDistance - 1] = {};
             }
-            cellData[selectedSheet][startCell[0] + rowDistance - 1][startCell[1] + colDistance - 1] = {...clipboard.cellData[i][j]};
+            cellData[selectedSheet][startCell[0] + rowDistance - 1][startCell[1] + colDistance - 1] = { ...clipboard.cellData[i][j] };
         }
     }
     loadCurrentSheet();
