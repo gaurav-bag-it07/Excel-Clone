@@ -1,5 +1,9 @@
 # Excel-Clone
 🔗 https://excel-clone-app.netlify.app/
+<br/>
+<br/>
+<a ><img align="center" widht="200" height="200" src="https://github.com/gaurav-baghel/Excel-Clone/blob/main/Screenshots/1641054389491.png" /></a>
+
 <br/><br/>
 ## Description:
 Excel clone is a Web-based spreadsheet application similar to MS Excel/Google Sheets with all fundamental functionalities.
